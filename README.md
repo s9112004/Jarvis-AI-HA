@@ -2,7 +2,7 @@
 
 If you want a personal, single-user assistant that feels local, fast, always-on, and can actually control your home, this is it.
 
-J.A.R.V.I.S. is a self-hosted AI assistant platform. You run an always-on process (the Gateway) on a machine you control (like an Ubuntu Server). The Gateway connects your Telegram to Google's Gemini 2.0 intelligence, and acts as the secure bridge to your Home Assistant network.
+J.A.R.V.I.S. is a self-hosted AI assistant platform. You run an always-on process (the Gateway) on a machine you control (like an Ubuntu Server). The Gateway connects your Telegram to Google's Gemini intelligence, and acts as the secure bridge to your Home Assistant network.
 
 ---
 
@@ -19,7 +19,7 @@ J.A.R.V.I.S. is easiest to understand as 4 core layers:
 
 1. **Gateway (Control Plane)** — One long-running Python process (`main.py`) that handles message ingress/egress.
 2. **Channel** — The adapter for **Telegram**, normalizing chat messages into the system.
-3. **Agent Runtime** — Takes your context, connects to **Google Gemini 2.0 Flash** via the new `google-genai` SDK, and streams elegant, butler-style responses.
+3. **Agent Runtime** — Takes your context, connects to **Google Gemini 3.0 Flash preview** via the new `google-genai` SDK, and streams elegant, butler-style responses.
 4. **Tools** — Capabilities beyond text. (Integrating Home Assistant REST API control).
 
 ---
