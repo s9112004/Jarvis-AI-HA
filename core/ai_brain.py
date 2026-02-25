@@ -25,7 +25,7 @@ def scan_home_devices() -> str:
 # 🧠 核心對話邏輯 (自動化思考)
 # ==========================================
 chat = client.chats.create(
-    model='gemini-2.0-flash',
+    model='gemini-3-flash-preview', #gemini-3-flash-preview
     config=types.GenerateContentConfig(
         system_instruction=(
             "你現在是賈維斯(J.A.R.V.I.S.)，先生的全能 AI 管家。 "
