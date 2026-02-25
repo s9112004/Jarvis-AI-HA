@@ -1,4 +1,4 @@
-# 🦞 J.A.R.V.I.S. (Jarvis-AI-HA)
+# ⚛️ J.A.R.V.I.S. (Jarvis-AI-HA)
 
 If you want a personal, single-user assistant that feels local, fast, always-on, and can actually control your home, this is it.
 
