@@ -1,4 +1,10 @@
 import os
+# --- 終極清除干擾：強制 Python 無視任何 Proxy 設定 ---
+os.environ['http_proxy'] = ''
+os.environ['https_proxy'] = ''
+os.environ['ALL_PROXY'] = ''
+# ---------------------------------------------------
+
 import telebot
 from dotenv import load_dotenv
 from google import genai
