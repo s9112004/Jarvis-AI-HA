@@ -1,6 +1,5 @@
 # ⚛️ J.A.R.V.I.S. (Jarvis-AI-HA)
 
-test123
 If you want a personal, single-user assistant that feels local, fast, always-on, and can actually control your home, this is it.
 
 J.A.R.V.I.S. is a self-hosted AI assistant platform. You run an always-on process (the Gateway) on a machine you control (like an Ubuntu Server). The Gateway connects your Telegram to Google's Gemini intelligence, and acts as the secure bridge to your Home Assistant network.
