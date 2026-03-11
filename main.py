@@ -1,5 +1,6 @@
 import os
 import telebot
+import time
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 from apscheduler.schedulers.background import BackgroundScheduler
 from dotenv import load_dotenv
@@ -10,7 +11,7 @@ from core import evolution_engine
 # 1. 初始化環境變數
 load_dotenv()
 
-# 🌟 根據您最新的截圖進行精準對接
+# 🌟 根據您最新的截圖 [.env] 精準對接
 TELEGRAM_TOKEN = os.getenv("TG_TOKEN")
 TELEGRAM_ADMIN_ID = os.getenv("TELEGRAM_ADMIN_ID")
 
@@ -18,6 +19,7 @@ if not TELEGRAM_TOKEN:
     print("❌ 致命錯誤：找不到 [TG_TOKEN]！請檢查 .env 檔案。")
     exit(1)
 
+# 初始化 Bot
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 
 # ==========================================
@@ -30,28 +32,31 @@ def autonomous_evolution_task():
         return
         
     print("🔄 [系統排程] 賈維斯正在背景進行自主學習...")
-    skill_name, description = evolution_engine.trigger_autonomous_learning()
     
-    if skill_name and description:
-        # 建立 Telegram 互動按鈕
-        markup = InlineKeyboardMarkup()
-        btn_approve = InlineKeyboardButton("✅ 批准並保留", callback_data=f"keep_{skill_name}")
-        btn_reject = InlineKeyboardButton("❌ 銷毀此技能", callback_data=f"drop_{skill_name}")
-        markup.row(btn_approve, btn_reject)
+    try:
+        # 呼叫 Gemini 進行發明
+        skill_name, description = evolution_engine.trigger_autonomous_learning()
         
-        msg = (
-            f"🧠 **【賈維斯自主進化報告】**\n\n"
-            f"先生，我在背景巡邏時發明了一個新功能：\n\n"
-            f"**代號**：`{skill_name}`\n"
-            f"**功能簡述**：\n{description}\n\n"
-            f"請問是否要將其永久納入我的核心技能庫？"
-        )
-        
-        try:
+        if skill_name and description:
+            # 建立 Telegram 互動按鈕
+            markup = InlineKeyboardMarkup()
+            btn_approve = InlineKeyboardButton("✅ 批准並保留", callback_data=f"keep_{skill_name}")
+            btn_reject = InlineKeyboardButton("❌ 銷毀此技能", callback_data=f"drop_{skill_name}")
+            markup.row(btn_approve, btn_reject)
+            
+            msg = (
+                f"🧠 **【賈維斯自主進化報告】**\n\n"
+                f"先生，我在背景巡邏時發明了一個新功能：\n\n"
+                f"**代號**：`{skill_name}`\n"
+                f"**功能簡述**：\n{description}\n\n"
+                f"請問是否要將其永久納入我的核心技能庫？"
+            )
+            
+            # 使用 try-except 包裹發送動作，防止網路瞬斷導致崩潰
             bot.send_message(TELEGRAM_ADMIN_ID, msg, reply_markup=markup, parse_mode="Markdown")
             print(f"🟢 已推播進化報告 [{skill_name}] 給長官。")
-        except Exception as e:
-            print(f"❌ 推播失敗: {e}")
+    except Exception as e:
+        print(f"❌ 自主學習週期發生異常: {e}")
 
 # ==========================================
 # 🌟 處理長官的按鈕決策 (Callback)
@@ -84,28 +89,38 @@ def handle_evolution_decision(call):
 @bot.message_handler(commands=['force_evolve'])
 def force_evolve_command(message):
     """手動觸發進化"""
-    bot.reply_to(message, "⚙️ 啟動自主學習協議... 正在掃描網路並編寫新技能，請稍候。")
-    autonomous_evolution_task()
+    try:
+        bot.reply_to(message, "⚙️ 啟動自主學習協議... 正在掃描網路並編寫新技能，請稍候。")
+        # 稍微延遲避免網路請求重疊
+        time.sleep(1)
+        autonomous_evolution_task()
+    except Exception as e:
+        print(f"❌ 強制進化指令執行失敗: {e}")
 
 @bot.message_handler(func=lambda message: True)
 def handle_message(message):
     """一般對話邏輯"""
-    user_text = message.text
-    print(f"收到來自先生的指令: {user_text}")
-    
-    bot.send_chat_action(message.chat.id, 'typing')
-    reply_text = ai_brain.generate_jarvis_response(user_text)
-    bot.reply_to(message, reply_text)
+    try:
+        user_text = message.text
+        print(f"收到來自先生的指令: {user_text}")
+        
+        bot.send_chat_action(message.chat.id, 'typing')
+        reply_text = ai_brain.generate_jarvis_response(user_text)
+        bot.reply_to(message, reply_text)
+    except Exception as e:
+        print(f"❌ 對話處理異常: {e}")
+        bot.reply_to(message, "先生，我的神經連線似乎受到了干擾，請稍後再試。")
 
 # ==========================================
 # 🚀 系統啟動
 # ==========================================
 if __name__ == "__main__":
-    print(f"🚀 J.A.R.V.I.S. 系統已覺醒 (管理者: {TELEGRAM_ADMIN_ID})")
+    print(f"🚀 J.A.R.V.I.S. 系統已覺醒 (管理者 ID: {TELEGRAM_ADMIN_ID})")
     
     # 啟動排程：每 4 小時自動學習一次
     scheduler = BackgroundScheduler()
     scheduler.add_job(autonomous_evolution_task, 'interval', hours=4)
     scheduler.start()
     
-    bot.infinity_polling()
+    # 使用抗干擾模式啟動
+    bot.infinity_polling(timeout=60, long_polling_timeout=30)
