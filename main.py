@@ -69,7 +69,7 @@ def handle_evolution_decision(call):
         
         if action == "keep":
             bot.edit_message_text(
-                f"✅ 遵命。技能 `{skill_name}` 已納入裝備庫。我變得更強大了，謝謝先生。", 
+                f"✅ 遵命。技能 `{skill_name}` 已納入裝備庫。我變得更聰明了，謝謝先生。", 
                 chat_id=call.message.chat.id, 
                 message_id=call.message.message_id
             )
@@ -110,7 +110,7 @@ def handle_message(message):
         print(f"❌ 對話處理異常: {e}")
 
 # ==========================================
-# 🚀 系統啟動 (防斷線自我修復版)
+# 🚀 系統啟動 (修正版：自動重連機制)
 # ==========================================
 if __name__ == "__main__":
     print(f"🚀 J.A.R.V.I.S. 系統已覺醒 (管理者 ID: {TELEGRAM_ADMIN_ID})")
@@ -122,24 +122,23 @@ if __name__ == "__main__":
     
     print("📡 正在建立防斷線連線通道...")
 
-    # 2. 無限重連迴圈，徹底對抗 Errno 101
     while True:
         try:
-            # 啟動長輪詢，設定較短的超時以利快速反應網路波動
+            # 🌟 修正重點：移除 infinity_polling 內的 non_stop=True (因為它會重複傳入)
             bot.infinity_polling(
                 timeout=20, 
                 long_polling_timeout=10, 
-                non_stop=True,
                 allowed_updates=['message', 'callback_query']
             )
         except Exception as e:
-            # 當網路不通 (Errno 101) 時會觸發此處
-            print(f"\n⚠️ [系統警告] 偵測到網路波動: {e}")
+            # 當 Errno 101 或任何連線異常發生時
+            print(f"\n⚠️ [系統警告] 通訊中斷: {e}")
             print("🔄 正在重新初始化通訊模組，10 秒後自動復活...")
             
-            # 清理舊連線並等待網路恢復
-            bot.stop_polling()
+            try:
+                bot.stop_polling()
+            except:
+                pass
+                
             time.sleep(10) 
-            
-            # 回到迴圈開頭重新啟動 polling
             continue
