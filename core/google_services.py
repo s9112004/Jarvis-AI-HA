@@ -4,9 +4,9 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build  # 🌟 新增：用來建立 Google API 服務的工具
 
-# 權限範圍：Gmail 唯讀、Tasks 讀寫
+# 從原本的 .readonly 改成完全控制權限
 SCOPES = [
-    'https://www.googleapis.com/auth/gmail.readonly',
+    'https://mail.google.com/',  # 🌟 Gmail 上帝權限：可讀、可寫、可刪、可發送
     'https://www.googleapis.com/auth/tasks'
 ]
 
