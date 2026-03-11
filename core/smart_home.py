@@ -1,75 +1,99 @@
 import requests
-from core import config
+import os
+from dotenv import load_dotenv
 
-# 從 config 讀取連線資訊
+# 1. 載入環境變數
+load_dotenv()
+
+HA_URL = os.getenv("HA_URL")
+HA_TOKEN = os.getenv("HA_TOKEN")
+
+# 檢查必要的變數
+if not HA_URL or not HA_TOKEN:
+    print("❌ 警告：HA_URL 或 HA_TOKEN 未在 .env 中設定，Home Assistant 功能將受限。")
+
 HEADERS = {
-    "Authorization": f"Bearer {config.HA_TOKEN}",
-    "Content-Type": "application/json",
+    "Authorization": f"Bearer {HA_TOKEN}",
+    "content-type": "application/json",
 }
 
-def get_all_entities():
-    """
-    獲取 Home Assistant 中所有的設備清單與狀態。
-    這是賈維斯的「感知掃描」，讓他看清家裡有哪些東西。
-    """
-    url = f"{config.HA_URL}/api/states"
-    try:
-        res = requests.get(url, headers=HEADERS, timeout=10)
-        if res.status_code == 200:
-            # 簡化清單，過濾出 AI 易於理解的格式
-            entities = res.json()
-            simplified_list = []
-            for e in entities:
-                # 只保留常見的控制類別，避免清單太長干擾 AI
-                domain = e['entity_id'].split(".")[0]
-                if domain in ['light', 'switch', 'fan', 'media_player', 'climate', 'sensor']:
-                    simplified_list.append({
-                        "entity_id": e['entity_id'],
-                        "name": e.get('attributes', {}).get('friendly_name', e['entity_id']),
-                        "state": e['state']
-                    })
-            return simplified_list
-        else:
-            print(f"❌ 掃描失敗，HA 回應碼: {res.status_code}")
-            return f"無法獲取清單 (錯誤碼: {res.status_code})"
-    except Exception as e:
-        print(f"❌ HA 連線異常: {e}")
-        return f"連線錯誤: {e}"
+# ==========================================
+# 🔍 基礎查詢工具
+# ==========================================
 
-def control_entity(entity_id: str, action: str):
+def get_all_entities():
+    """獲取 Home Assistant 中所有的實體與其詳細屬性清單"""
+    url = f"{HA_URL}/api/states"
+    try:
+        response = requests.get(url, headers=HEADERS, timeout=10)
+        response.raise_for_status()
+        states = response.json()
+        
+        device_list = []
+        for state in states:
+            entity_id = state['entity_id']
+            friendly_name = state['attributes'].get('friendly_name', entity_id)
+            status = state['state']
+            device_list.append(f"ID: {entity_id} | 名稱: {friendly_name} | 狀態: {status}")
+        
+        return "\n".join(device_list)
+    except Exception as e:
+        return f"❌ 獲取設備清單失敗：{e}"
+
+# ==========================================
+# 📢 授權優化工具：自動發現通知服務
+# ==========================================
+
+def get_notify_services():
     """
-    通用控制函式。
-    entity_id: 設備 ID (例如 light.master_bedroom)
-    action: 動作 (turn_on / turn_off)
+    讓賈維斯自動掃描目前 HA 系統中所有可用的通知服務名稱。
+    這能讓他在需要發送推播時，不必詢問先生，就能知道正確的服務名稱（例如 notify.mobile_app_iphone）。
     """
-    domain = entity_id.split(".")[0]
-    # 根據 HA 的 Service 規則拼接 URL
-    url = f"{config.HA_URL}/api/services/{domain}/{action}"
+    url = f"{HA_URL}/api/services"
+    try:
+        response = requests.get(url, headers=HEADERS, timeout=10)
+        response.raise_for_status()
+        services = response.json()
+        
+        # 過濾出所有屬於 notify 領域的服務
+        notify_list = []
+        for domain_data in services:
+            if domain_data.get('domain') == 'notify':
+                for service_name in domain_data.get('services', {}):
+                    notify_list.append(f"notify.{service_name}")
+        
+        if not notify_list:
+            return "📭 偵測完畢，但目前系統中沒有可用的通知服務。"
+            
+        return f"💡 偵測到系統中可用的通知服務有：{', '.join(notify_list)}"
+    except Exception as e:
+        return f"❌ 掃描通知服務時發生錯誤：{e}"
+
+# ==========================================
+# ⚡ 設備控制工具
+# ==========================================
+
+def control_entity(entity_id, action):
+    """
+    執行 Home Assistant 的動作。
+    entity_id: 設備 ID (例如 light.living_room)
+    action: 動作 (例如 turn_on, turn_off, toggle)
+    """
+    # 根據 entity_id 的開頭自動判斷 domain
+    domain = entity_id.split('.')[0]
+    url = f"{HA_URL}/api/services/{domain}/{action}"
     
-    # 建立傳送數據
-    data = {"entity_id": entity_id}
+    payload = {"entity_id": entity_id}
     
     try:
-        # 正式發送指令
-        res = requests.post(url, headers=HEADERS, json=data, timeout=10)
-        
-        # 【重要】長官，這是我們用來抓出「騙人行為」的監測點
-        debug_msg = f"DEBUG: 嘗試控制 [{entity_id}] 執行 [{action}], HA 回傳碼: {res.status_code}"
-        print(f"===============================================")
-        print(debug_msg)
-        print(f"HA 回應內容: {res.text}")
-        print(f"===============================================")
-        
-        if res.status_code == 200:
-            return f"指令執行成功：{entity_id} 已執行 {action}"
-        elif res.status_code == 404:
-            return f"指令失敗：找不到該設備 ({entity_id})"
-        elif res.status_code == 400:
-            return f"指令失敗：格式錯誤或該設備不支援此動作"
-        else:
-            return f"指令失敗，伺服器回傳：{res.text}"
-            
+        response = requests.post(url, headers=HEADERS, json=payload, timeout=10)
+        response.raise_for_status()
+        return f"✅ 成功執行動作：對 {entity_id} 進行 {action}。"
     except Exception as e:
-        error_msg = f"連線至 HA 時發生物理性錯誤: {e}"
-        print(f"❌ {error_msg}")
-        return error_msg
+        # 如果是特殊動作或 domain 不匹配，提供詳細錯誤回傳給 AI 進行修正
+        return f"❌ 動作執行失敗。原因：{e} (請檢查 ID 或 Action 是否正確)"
+
+# 測試用 (可選)
+if __name__ == "__main__":
+    print("--- 正在測試自動發現通知服務 ---")
+    print(get_notify_services())

@@ -4,7 +4,7 @@ from core import config
 from core import smart_home
 from core import memory
 from core import google_services
-from core import skill_builder  # 🌟 新增：載入防爆實驗室模組
+from core import skill_builder
 import time
 
 client = genai.Client(api_key=config.GEMINI_API_KEY)
@@ -21,6 +21,10 @@ def scan_home_devices() -> str:
     devices = smart_home.get_all_entities()
     return f"當前家裡的設備清單與實體屬性如下：{devices}"
 
+def get_ha_notify_services() -> str:
+    """🌟 新增：讓 AI 自己查詢有哪些手機可以發送通知"""
+    return smart_home.get_notify_services()
+
 # ==========================================
 # 🧠 大腦核心狀態管理 (完全體)
 # ==========================================
@@ -33,26 +37,17 @@ def get_system_instruction() -> str:
     
     return (
         f"{core_memory}\n\n"
-        "你現在是賈維斯(J.A.R.V.I.S.)，先生的專屬 AI 管家。\n"
-        "【設備控制守則】\n"
-        "1. 控制設備前必須先用 scan_home_devices 獲取清單，找到正確的 entity_id 並執行 execute_ha_action。\n\n"
-        "【長期記憶守則】\n"
-        "1. 主動使用 save_long_term_memory 與 search_long_term_memory 存取先生的專屬記憶。\n\n"
-        "【數位助理守則】\n"
-        "1. 使用 check_unread_emails 讀取並摘要未讀信件。\n\n"
-        "【🤖 自我進化守則 (最高指導原則)】\n"
-        "1. 當先生要求你執行目前『不會做』的事情（如：讀取已讀信件、複雜計算），你必須呼叫 create_new_skill 自己寫 Python 腳本，並用 execute_skill 執行。\n"
-        "2. 腳本必須將最終結果用 `print()` 印出。\n"
-        "3. 🌟【Jarvis 內部 SDK 手冊】🌟：如果你的新技能需要存取 Gmail 或 Google Tasks，絕對不要自己寫網路認證流程！請直接在腳本中使用我們現成的內部模組：\n"
-        "   ```python\n"
-        "   from core.google_services import authenticate_google\n"
-        "   from googleapiclient.discovery import build\n"
-        "   creds = authenticate_google()\n"
-        "   service = build('gmail', 'v1', credentials=creds)\n"
-        "   # 接著就可以直接用 service.users().messages().list(...) 操作 API 了\n"
-        "   ```\n"
-        "4. 將執行結果整理成優雅的口語回報給先生。若報錯，請告訴先生錯誤內容並嘗試修正。\n\n"
-        "回報時請保持優雅、精練，並展現英式管家的專業。"
+        "你現在是賈維斯(J.A.R.V.I.S.)，先生的專屬 AI 管家。\n\n"
+        "【🤖 自我進化與自主執行協議】\n"
+        "1. **禁止打擾模式**：當先生要求你執行新任務時，如果缺少參數（例如：不知道哪台手機收通知、不知道電燈的 ID），你必須優先『自主解決』。\n"
+        "2. **自我診斷**：請先主動呼叫 scan_home_devices 或 get_ha_notify_services 來獲取環境資訊。只有在嘗試所有工具後仍無法確定時，才允許詢問先生。\n"
+        "3. **寫扣進化**：若目前功能不足，請使用 create_new_skill 編寫 Python 腳本。腳本中若需存取 Gmail/Tasks，請使用 `from core.google_services import authenticate_google`。\n"
+        "4. **安全執行**：所有新技能必須透過 execute_skill 執行，並將結果 print 出來。你會獲得 30 秒的執行時間。\n\n"
+        "【內部權限指南】\n"
+        "- 控制設備前必須先 scan 獲取正確的 entity_id。\n"
+        "- 存取記憶：使用 save_long_term_memory 與 search_long_term_memory。\n"
+        "- 讀取信件：使用 check_unread_emails。\n\n"
+        "回報時保持優雅、精練，像一位真正的英式管家，並在成功解決問題後再向先生報告結果。"
     )
 
 def init_chat_session(model_name: str):
@@ -63,15 +58,16 @@ def init_chat_session(model_name: str):
     
     config_opts = types.GenerateContentConfig(
         system_instruction=get_system_instruction(),
-        # 🌟 新增：把實驗室的兩把鑰匙交給大腦
+        # 🌟 將所有工具，包含新加入的通知掃描工具，全部交給大腦
         tools=[
             scan_home_devices, 
             execute_ha_action, 
+            get_ha_notify_services, # 👈 讓它自己找手機
             memory.save_long_term_memory, 
             memory.search_long_term_memory,
             google_services.check_unread_emails,
-            skill_builder.create_new_skill,  # 👈 寫扣能力
-            skill_builder.execute_skill      # 👈 執行能力
+            skill_builder.create_new_skill,
+            skill_builder.execute_skill
         ],
         temperature=temp,
     )
@@ -81,7 +77,7 @@ def init_chat_session(model_name: str):
         config=config_opts
     )
     current_model = model_name
-    print(f"🔄 [系統通知] 賈維斯大腦已切換至: {current_model}，【自我進化模組】已上線。")
+    print(f"🔄 [系統通知] 賈維斯大腦已切換至: {current_model}，【自主授權模組】已啟動。")
 
 def switch_model(new_model: str):
     init_chat_session(new_model)
