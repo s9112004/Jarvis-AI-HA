@@ -7,3 +7,7 @@ __pycache__/
 
 # 未來如果你用 Mac 開發，這個系統隱藏檔也不要傳
 .DS_Store
+
+# J.A.R.V.I.S. Memory Files
+archive.db
+core_settings.json
