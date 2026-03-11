@@ -11,3 +11,6 @@ __pycache__/
 # J.A.R.V.I.S. Memory Files
 archive.db
 core_settings.json
+
+# gmail information
+credentials.json
