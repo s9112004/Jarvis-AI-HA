@@ -14,3 +14,4 @@ core_settings.json
 
 # gmail information
 credentials.json
+token.json
