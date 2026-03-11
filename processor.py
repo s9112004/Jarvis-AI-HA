@@ -1,40 +1,52 @@
-import time, os, json
+import time
+from core import queue_manager
 from core import ai_brain
-
-QUEUE_FILE = "task_queue.json"
 
 
 def work():
-    print("🧠 賈維斯參謀部已啟動，準備處理複雜運算...")
+    print("🧠 賈維斯參謀部已啟動，準備進行安全運算...")
     while True:
-        if os.path.exists(QUEUE_FILE):
-            try:
-                with open(QUEUE_FILE, "r+") as f:
-                    tasks = json.load(f)
-                    if not tasks:
-                        time.sleep(1);
-                        continue
-                    task = tasks.pop(0)
-                    f.seek(0);
-                    json.dump(tasks, f);
-                    f.truncate()
+        # 1. 拿取最新的任務
+        task = queue_manager.get_next_pending_task()
 
-                # --- 根據任務類型處理 ---
-                if task['type'] == "switch_model":
-                    ai_brain.switch_model(task['model_name'])
-                    response_text = f"✅ 先生，核心已切換為 `{task['model_name']}`。我現在感覺更靈敏了。"
+        if not task:
+            time.sleep(1)
+            continue
 
-                elif task['type'] == "chat":
-                    response_text = ai_brain.generate_jarvis_response(task['text'])
+        print(f"⚙️ 開始處理排隊任務 ID[{task['id']}]: {task['text'][:20]}...")
 
-                # --- 寫回結果 ---
-                result_path = f"reply_{int(time.time() * 1000)}.json"
-                with open(result_path, "w") as f:
-                    json.dump({"chat_id": task['chat_id'], "text": response_text, "msg_id": task.get('msg_id')}, f)
+        # 2. 🌟 上鎖：宣告大腦忙碌中
+        queue_manager.set_state("BUSY")
+        queue_manager.mark_task_processing(task['id'])
 
-            except Exception as e:
-                print(f"❌ 參謀部運作異常: {e}")
-        time.sleep(0.5)
+        try:
+            # 3. 根據任務類型進行運算
+            if task['task_type'] == "switch_model":
+                ai_brain.switch_model(task['text'])
+                response_text = f"✅ 先生，核心已成功切換為 `{task['text']}`。"
+
+            elif task['task_type'] == "chat":
+                response_text = ai_brain.generate_jarvis_response(task['text'])
+
+            elif task['task_type'] == "evolution_decision":
+                # 未來若需處理決策邏輯可放此
+                response_text = "✅ 技能決策已處理。"
+            else:
+                response_text = "❌ 未知的任務類型。"
+
+            # 4. 運算成功，寫入結果
+            queue_manager.mark_task_completed(task['id'], response_text)
+            print(f"✅ 任務 ID[{task['id']}] 處理完畢。")
+
+        except Exception as e:
+            # 發生任何錯誤，將錯誤訊息回傳給通訊官
+            error_msg = f"❌ 系統運算異常，任務中斷: {e}"
+            print(error_msg)
+            queue_manager.mark_task_completed(task['id'], error_msg)
+
+        finally:
+            # 5. 🌟 絕對解鎖：不管成功失敗，都要把狀態改回空閒
+            queue_manager.set_state("IDLE")
 
 
 if __name__ == "__main__":
