@@ -20,26 +20,20 @@ if not TELEGRAM_TOKEN:
     print("❌ 致命錯誤：找不到 [TG_TOKEN]！請檢查 .env 檔案內容。")
     exit(1)
 
-# 初始化 Telegram Bot
-bot = telebot.TeleBot(TELEGRAM_TOKEN)
-
 # ==========================================
 # 🌟 心跳引擎：主動推播進化報告
 # ==========================================
-def autonomous_evolution_task():
+def autonomous_evolution_task(bot_instance):
     """賈維斯的背景自主學習週期"""
     if not TELEGRAM_ADMIN_ID:
-        print("⚠️ 尚未設定 TELEGRAM_ADMIN_ID，無法主動推播報告。")
         return
         
     print("🔄 [系統排程] 賈維斯正在背景進行自主學習...")
     
     try:
-        # 呼叫進化引擎進行發明與測試
         skill_name, description = evolution_engine.trigger_autonomous_learning()
         
         if skill_name and description:
-            # 建立 Telegram 互動按鈕
             markup = InlineKeyboardMarkup()
             btn_approve = InlineKeyboardButton("✅ 批准並保留", callback_data=f"keep_{skill_name}")
             btn_reject = InlineKeyboardButton("❌ 銷毀此技能", callback_data=f"drop_{skill_name}")
@@ -53,92 +47,58 @@ def autonomous_evolution_task():
                 f"請問是否要將其永久納入我的核心技能庫？"
             )
             
-            bot.send_message(TELEGRAM_ADMIN_ID, msg, reply_markup=markup, parse_mode="Markdown")
+            bot_instance.send_message(TELEGRAM_ADMIN_ID, msg, reply_markup=markup, parse_mode="Markdown")
             print(f"🟢 已成功推播進化報告 [{skill_name}]。")
     except Exception as e:
         print(f"❌ 自主學習週期發生異常: {e}")
 
 # ==========================================
-# 🌟 處理按鈕回饋 (Callback)
-# ==========================================
-@bot.callback_query_handler(func=lambda call: True)
-def handle_evolution_decision(call):
-    try:
-        # 解析按鈕回傳的資料格式 "action_skillname"
-        action, skill_name = call.data.split("_", 1)
-        
-        if action == "keep":
-            bot.edit_message_text(
-                f"✅ 遵命。技能 `{skill_name}` 已納入裝備庫。我變得更聰明了，謝謝先生。", 
-                chat_id=call.message.chat.id, 
-                message_id=call.message.message_id
-            )
-        elif action == "drop":
-            evolution_engine.delete_rejected_skill(skill_name)
-            bot.edit_message_text(
-                f"🗑️ 收到。已銷毀技能 `{skill_name}` 的所有程式碼與紀錄。", 
-                chat_id=call.message.chat.id, 
-                message_id=call.message.message_id
-            )
-    except Exception as e:
-        print(f"❌ 按鈕處理錯誤: {e}")
-
-# ==========================================
-# 💬 一般對話與強制指令
-# ==========================================
-@bot.message_handler(commands=['force_evolve'])
-def force_evolve_command(message):
-    """手動強制觸發自主學習"""
-    try:
-        bot.reply_to(message, "⚙️ 啟動自主學習協議... 正在掃描網路並編寫新技能，請稍候。")
-        time.sleep(1) # 緩衝以避免連線重疊
-        autonomous_evolution_task()
-    except Exception as e:
-        print(f"❌ 強制進化指令執行失敗: {e}")
-
-@bot.message_handler(func=lambda message: True)
-def handle_message(message):
-    """一般對話處理"""
-    try:
-        user_text = message.text
-        print(f"收到來自先生的指令: {user_text}")
-        
-        bot.send_chat_action(message.chat.id, 'typing')
-        reply_text = ai_brain.generate_jarvis_response(user_text)
-        bot.reply_to(message, reply_text)
-    except Exception as e:
-        print(f"❌ 對話處理異常: {e}")
-
-# ==========================================
-# 🚀 系統啟動 (修正版：自動重連機制)
+# 🚀 系統啟動 (防彈完全體)
 # ==========================================
 if __name__ == "__main__":
-    print(f"🚀 J.A.R.V.I.S. 系統已覺醒 (管理者 ID: {TELEGRAM_ADMIN_ID})")
+    print(f"🚀 J.A.R.V.I.S. 系統準備覺醒 (管理者 ID: {TELEGRAM_ADMIN_ID})")
     
-    # 1. 啟動背景排程 (每 4 小時一次)
+    # 初始化一個全域 Bot 變數
+    bot = telebot.TeleBot(TELEGRAM_TOKEN)
+
+    # 定義對話與按鈕處理 (放在外面避免重複註冊)
+    @bot.callback_query_handler(func=lambda call: True)
+    def handle_evolution_decision(call):
+        try:
+            action, skill_name = call.data.split("_", 1)
+            if action == "keep":
+                bot.edit_message_text(f"✅ 技能 `{skill_name}` 已納入裝備庫。", call.message.chat.id, call.message.message_id)
+            elif action == "drop":
+                evolution_engine.delete_rejected_skill(skill_name)
+                bot.edit_message_text(f"🗑️ 已銷毀技能 `{skill_name}`。", call.message.chat.id, call.message.message_id)
+        except Exception as e: print(f"❌ 按鈕處理錯誤: {e}")
+
+    @bot.message_handler(commands=['force_evolve'])
+    def force_evolve_command(message):
+        bot.reply_to(message, "⚙️ 啟動自主學習協議... 請稍候。")
+        autonomous_evolution_task(bot)
+
+    @bot.message_handler(func=lambda message: True)
+    def handle_message(message):
+        bot.send_chat_action(message.chat.id, 'typing')
+        reply_text = ai_brain.generate_jarvis_response(message.text)
+        bot.reply_to(message, reply_text)
+
+    # 1. 啟動背景排程 (傳入 bot 實例)
     scheduler = BackgroundScheduler()
-    scheduler.add_job(autonomous_evolution_task, 'interval', hours=4)
+    scheduler.add_job(lambda: autonomous_evolution_task(bot), 'interval', hours=4)
     scheduler.start()
     
-    print("📡 正在建立防斷線連線通道...")
-
+    # 2. 核心重連機制：即使 getMe 失敗也要撐住
+    print("📡 正在嘗試建立穩定通訊頻道...")
     while True:
         try:
-            # 🌟 修正重點：移除 infinity_polling 內的 non_stop=True (因為它會重複傳入)
-            bot.infinity_polling(
-                timeout=20, 
-                long_polling_timeout=10, 
-                allowed_updates=['message', 'callback_query']
-            )
+            # 這裡不直接用 infinity_polling，先用一次簡單的檢測
+            bot.get_me() 
+            print("🟢 通訊頻道建立成功！賈維斯已上線。")
+            bot.polling(none_stop=True, timeout=20, long_polling_timeout=10)
         except Exception as e:
-            # 當 Errno 101 或任何連線異常發生時
-            print(f"\n⚠️ [系統警告] 通訊中斷: {e}")
-            print("🔄 正在重新初始化通訊模組，10 秒後自動復活...")
-            
-            try:
-                bot.stop_polling()
-            except:
-                pass
-                
-            time.sleep(10) 
+            print(f"\n⚠️ [系統警告] 網路連線失敗 (Errno 101): {e}")
+            print("🔄 正在重新初始化網路模組，15 秒後嘗試重連...")
+            time.sleep(15)
             continue
