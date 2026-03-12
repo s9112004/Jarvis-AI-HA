@@ -10,6 +10,10 @@ ADMIN_ID = os.getenv("TELEGRAM_ADMIN_ID")
 
 telebot.apihelper.RETRY_ON_ERROR = True
 
+# 🌟 新增的網路保險絲：強制 Telegram 連線與讀取的超時時間
+telebot.apihelper.CONNECT_TIMEOUT = 10  # 嘗試連線超過 10 秒就放棄
+telebot.apihelper.READ_TIMEOUT = 15     # 等待伺服器回應超過 15 秒就放棄
+
 @bot.message_handler(commands=['model'])
 def model_switch_command(message):
     markup = InlineKeyboardMarkup()
