@@ -1,7 +1,10 @@
 import time
+
 from core import ai_brain
 from core import queue_manager
 from core.logger import logger
+from core.network_health import network_health
+from core.startup_checks import run_startup_checks
 
 MAX_PROCESS_RETRIES = 6
 PROCESS_RETRY_BASE_DELAY = 10
@@ -68,8 +71,17 @@ def _normalize_ai_response(response_text):
     return clean_text
 
 
+def _service_name_for_task(task_type):
+    if task_type == "chat":
+        return "gemini"
+    if task_type == "smart_home":
+        return "home_assistant"
+    return "general"
+
+
 def work():
     logger.info("🧠 賈維斯參謀部已啟動，具備穩定版斷線重試防護...")
+    run_startup_checks(logger)
 
     while True:
         task = queue_manager.claim_next_pending_task()
@@ -80,18 +92,37 @@ def work():
             continue
 
         task_id = task["id"]
+        trace_id = task.get("trace_id") or "unknown"
         task_type = task.get("task_type")
         task_text = task.get("text") or ""
         retry_count = int(task.get("process_retry_count") or 0)
+        service_name = _service_name_for_task(task_type)
 
-        logger.info(f"⚙️ 開始處理排隊任務 ID[{task_id}]: {_preview_text(task_text)}")
+        can_attempt, wait_seconds = network_health.can_attempt(service_name)
+        if not can_attempt:
+            queue_manager.requeue_task(
+                task_id,
+                delay_seconds=wait_seconds,
+                error=f"{service_name} circuit open",
+                increment_retry=False,
+            )
+            logger.warning(
+                f"[trace:{trace_id}] ⚠️ {service_name} 目前離線保護中，"
+                f"任務 ID[{task_id}] 延後 {wait_seconds} 秒再試。"
+            )
+            time.sleep(0.2)
+            continue
+
+        logger.info(
+            f"[trace:{trace_id}] ⚙️ 開始處理排隊任務 ID[{task_id}] "
+            f"type={task_type} text={_preview_text(task_text)}"
+        )
         queue_manager.set_state("BUSY")
 
         try:
             if task_type == "switch_model":
                 ai_brain.switch_model(task_text)
                 response_text = f"✅ 先生，核心已成功切換為 `{task_text}`。"
-                logger.info(f"模型切換成功: {task_text}")
 
             elif task_type == "chat":
                 raw_response = ai_brain.generate_jarvis_response(task_text)
@@ -100,14 +131,24 @@ def work():
             elif task_type == "evolution_decision":
                 response_text = "✅ 技能決策已處理。"
 
+            elif task_type == "smart_home":
+                # 這裡先保留掛點，之後你要接 smart_home.py 可直接換掉
+                response_text = "✅ 智慧家庭任務已收到，待後續模組處理。"
+
             else:
                 response_text = "❌ 未知的任務類型。"
 
-            queue_manager.mark_task_completed(task_id, response_text)
-            logger.info(f"✅ 任務 ID[{task_id}] 大腦運算完畢，等待通訊官發送。")
+            network_health.mark_success(service_name)
+            queue_manager.mark_task_completed(
+                task_id,
+                response_text,
+                finished_reason="completed",
+            )
+            logger.info(f"[trace:{trace_id}] ✅ 任務 ID[{task_id}] 運算完畢，等待通訊官發送。")
 
         except Exception as e:
             if _is_network_error(e):
+                network_health.mark_failure(service_name, e)
                 next_retry_count = retry_count + 1
 
                 if next_retry_count <= MAX_PROCESS_RETRIES:
@@ -123,25 +164,31 @@ def work():
                         increment_retry=True,
                     )
                     logger.warning(
-                        f"⚠️ 偵測到外部連線異常！任務 ID[{task_id}] 將保留，"
-                        f"{delay} 秒後進行第 {next_retry_count} 次重試..."
+                        f"[trace:{trace_id}] ⚠️ 偵測到外部連線異常，任務 ID[{task_id}] "
+                        f"將於 {delay} 秒後進行第 {next_retry_count} 次重試。error={e}"
                     )
                 else:
                     logger.error(
-                        f"❌ 任務 ID[{task_id}] 已達處理重試上限，最後錯誤: {e}",
+                        f"[trace:{trace_id}] ❌ 任務 ID[{task_id}] 已達處理重試上限。error={e}",
                         exc_info=True
                     )
                     queue_manager.mark_task_completed(
                         task_id,
                         "❌ 目前外部連線仍不穩定，這次任務已停止重試，請稍後再試。",
                         error=str(e),
+                        finished_reason="process_retry_exhausted",
                     )
+
             else:
-                logger.error(f"系統運算發生未知異常，任務中斷: {e}", exc_info=True)
+                logger.error(
+                    f"[trace:{trace_id}] 系統運算發生未知異常，任務中斷: {e}",
+                    exc_info=True
+                )
                 queue_manager.mark_task_completed(
                     task_id,
                     "❌ 系統運算發生異常，這次任務已中止，請稍後再試。",
                     error=str(e),
+                    finished_reason="processor_exception",
                 )
 
         finally:
